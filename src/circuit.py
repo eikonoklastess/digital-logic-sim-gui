@@ -7,8 +7,13 @@ from tkinter import Canvas, ttk
 window = tk.Tk()
 window.title("Digital Logic GUI")
 window.geometry("1920x1080")
-c = Canvas(window, height=1080, width=1920, bg="white")
-c.pack()
+c = Canvas(window, height=1080, width=1500, bg="#f5f5dc")
+c.place(x=420, y=0)
+menu = tk.Frame(window, height= 1080, width=420, bg="#c2c2c2")
+menu.place(x=0, y=0)
+
+#:add_and = ttk.Button(menu, j
+
 
 class Point():
     def __init__(self, x, y):
@@ -19,13 +24,15 @@ class Circuit():
     def __init__(self, canvas):
         self.c = canvas
         self.gates = []
-        self.drag_data = {"x":0, "y":0, "gate":None, "output":None}
+        self.buffer = None
+        self.drag_data = {"x":0, "y":0, "gate":None, "output":None, "corner": None, "connexion_number":None}
         self.c.tag_bind("gate_catching_area", "<ButtonPress-1>", self.gate_on_click)
         self.c.tag_bind("gate_catching_area", "<B1-Motion>", self.gate_on_dragbis)
         self.c.tag_bind("gate_catching_area", "<ButtonRelease-1>", self.gate_on_release)
         self.c.tag_bind("output_catching_area", "<ButtonPress-1>", self.pin_on_click)
-        self.c.tag_bind("output_catching_area", "<B1-Motion>", self.pin_on_drag)
+        # self.c.tag_bind("output_catching_area", "<B1-Motion>", self.pin_on_drag)
         self.c.tag_bind("input_catching_area", "<ButtonRelease-1>", self.pin_on_release)
+        self.c.tag_bind("output_catching_area", "<ButtonPress-3>", self.delete_connections)
         
     def add_gate(self, gate):
         self.gates.append(gate)
@@ -41,6 +48,7 @@ class Circuit():
                 self.drag_data["x"] = event.x
                 self.drag_data["y"] = event.y
                 self.drag_data["gate"] = gate
+
     def gate_on_dragbis(self, event):
         if self.drag_data["gate"] is not None:
             dx = event.x - self.drag_data["x"]
@@ -55,13 +63,14 @@ class Circuit():
                     output = input.connexion
                     tag = "connection"+output.tag
                     self.c.delete(tag)
-                    output.draw_connections()
+                    if len(output.connections) > 0:
+                        output.draw_connections()
 
             for output in self.drag_data["gate"].outputs:
                 tag = "connection"+output.tag
                 self.c.delete(tag)
-                output.draw_connections()
-            
+                if len(output.connections) > 0:
+                    output.draw_connections()
 
     def gate_on_release(self, event):
         coords = self.c.coords(self.drag_data["gate"].catching_area)
@@ -79,11 +88,7 @@ class Circuit():
                     self.drag_data["y"] = output.get_tip().y
                     self.drag_data["output"] = output
 
-    def pin_on_drag(self, event):
-        tag = "connection"+self.drag_data["output"].tag
-        self.c.delete(tag)
-        self.drag_data["output"].draw_connections(x=event.x, y=event.y)
-    
+
     def pin_on_release(self, event):
         if self.drag_data["output"] is not None:
             tag = "connection"+self.drag_data["output"].tag
@@ -92,11 +97,23 @@ class Circuit():
                 for input in gate.inputs:
                     tags = self.c.gettags(input.catching_area)
                     if "current" in tags:
-                        self.drag_data["x"] = input.get_tip().x
-                        self.drag_data["y"] = input.get_tip().y
-                        self.drag_data["output"].add_connection(input)
-                        self.drag_data["output"].draw_connections()
+                        if input.connexion is None:
+                            self.drag_data["x"] = input.get_tip().x
+                            self.drag_data["y"] = input.get_tip().y
+                            self.drag_data["output"].add_connection(input)
+                            self.drag_data["output"].draw_connections()
             self.drag_data["output"] = None
+
+    def delete_connections(self, event):
+        for gate in self.gates:
+            for output in gate.outputs:
+                tags = self.c.gettags(output.catching_area)
+                if "current" in tags:
+                    for input in output.connections:
+                        input.connexion = None
+                    output.connections = []
+                    self.c.delete("connection"+output.tag)
+        
 
 
 

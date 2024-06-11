@@ -1,6 +1,11 @@
-from circuit import Point, tk
 from pin import Input, Output
+import tkinter as tk
 import uuid
+
+class Point():
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
 
 class Gate():
     def __init__(self, canvas, pos):

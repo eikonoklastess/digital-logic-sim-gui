@@ -1,5 +1,8 @@
 import uuid
-from circuit import Point
+class Point():
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
 
 class Pin():
     def __init__(self, canvas, gate, id):
@@ -40,6 +43,7 @@ class Input(Pin):
         else:
             dy = self.gate.w // 2
             return Point(self.gate.pos.x-self.pin_l, self.gate.pos.y+dy)
+
 class Output(Pin):
     def __init__(self, canvas, gate, id):
         super().__init__(canvas, gate, id)
@@ -54,18 +58,32 @@ class Output(Pin):
     def add_connection(self, input_pin):
         self.connections.append(input_pin)
         input_pin.connexion = self
+
     def draw_connections(self, x=None, y=None):
         tag = "connection"+self.tag
+        connection_number = 0
         if x is not None and y is not None:
             pos1 = self.get_tip()
             pos2 = Point(x, y)
             self.c.create_line(pos1.x, pos1.y, pos2.x, pos1.y, fill="black", tags=(self.tag, tag))
             self.c.create_line(pos2.x, pos1.y, pos2.x, pos2.y, fill="black", tags=(self.tag, tag))
-        for connection in self.connections:
-            pos1 = self.get_tip()
-            pos2 = connection.get_tip()
-            self.c.create_line(pos1.x, pos1.y, pos2.x, pos1.y, fill="black", tags=(self.tag, tag))
-            self.c.create_line(pos2.x, pos1.y, pos2.x, pos2.y, fill="black", tags=(self.tag, tag))
+        else:
+            for connection in self.connections:
+                tag1 = tag + str(connection_number)
+                connection_number += 1
+                pos1 = self.get_tip()
+                pos2 = connection.get_tip()
+                self.c.create_line(pos1.x, pos1.y, pos2.x, pos1.y, fill="black", tags=(self.tag, tag, tag1))
+                self.c.create_line(pos2.x, pos1.y, pos2.x, pos2.y, fill="black", tags=(self.tag, tag, tag1))
+                
     def propagate_signal(self):
         for connection in self.connections:
             connection.val = self.val
+
+
+
+
+
+
+
+
