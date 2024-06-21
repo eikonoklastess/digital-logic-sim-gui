@@ -1,5 +1,8 @@
 # Digital Logic Simulator
 
+## Demo
+https://github.com/eikonoklastess/digital-logic-sim-gui/assets/155257788/23009d70-146d-4e0d-a583-654bab233ba5
+
 ## Overview
 This Digital Logic Simulator is a Python-based application that allows users to design, simulate, and analyze digital logic circuits. It provides a graphical interface for creating circuits with various logic gates and generating truth tables.
 
