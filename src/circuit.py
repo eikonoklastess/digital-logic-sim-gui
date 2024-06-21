@@ -41,7 +41,6 @@ class Circuit():
 
     # Logic handling functions
     def solve(self) -> None:
-        list(map(print, self.elements.values()))
         solving_queue = deque()
         for gate in [element for element in list(self.elements.values()) if isinstance(element, Gate)]:
             solving_queue.append(gate)
@@ -60,7 +59,6 @@ class Circuit():
             if will_continue:
                 continue
             current_gate.calc()
-        list(map(print, self.elements.values()))
         self.update_graphic(event=None)
 
     def gen_truth_table(self) -> None:
@@ -252,8 +250,6 @@ class Circuit():
             else:
                 correction = 1
             obj.update_graphic(pos=Point(a + dx + correction, b + dy + correction))
-            print(f"pos: x:{obj.pos.x}, y:{obj.pos.y}")
-            print(f"a:{a}, b:{b}, dx:{dx}, dy:{dy}")
         else:
             return
         self.drag_data["x"] = self.c.canvasx(event.x)
