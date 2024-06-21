@@ -1,8 +1,8 @@
 from os import truncate
-from mainbis import CircuitDesigner
-from pinbis import Pin
+from main import CircuitDesigner
+from pin import Pin
 from point import Point
-from gatebis import Gate
+from gate import Gate
 from pathlib import Path
 import os
 import tkinter as tk

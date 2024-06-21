@@ -2,7 +2,6 @@ import tkinter as tk
 from tkinter import ttk
 
 
-
 BG_COLOR: str = "#FFFFFF"
 BG_COLOR_DM: str = "#6C6C6C"
 GRID_COLOR: str = "#B6B6B6"
@@ -173,8 +172,8 @@ class Menu(tk.Frame):
 
 
 def main() -> None:
-    from circuitbis import Circuit
-    from gatebis import Gate
+    from circuit import Circuit
+    from gate import Gate
     from point import Point
     app = App()
     app_canva = CircuitDesigner(app)

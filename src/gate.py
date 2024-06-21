@@ -3,14 +3,14 @@ import tkinter as tk
 from tkinter import ttk
 import uuid
 from point import Point
-from mainbis import CircuitDesigner
+from main import CircuitDesigner
 import pprint as pp
 
 
 # if a gate object is created without option its created as a repeater gate that only propagate its input value
 class Gate():
     def __init__(self, canvas: CircuitDesigner, pos, tt=None, inputs=None, outputs=None, name=None):
-        from pinbis import Pin
+        from pin import Pin
         # Logical Representation
         self.tt: list[list] = tt if tt is not None else []  # tt for truth table
         if inputs is None and outputs is None:
@@ -72,7 +72,7 @@ class Gate():
 
     # functions for graphics
     def update_graphic(self, event=None, pos=None):
-        from pinbis import Pin
+        from pin import Pin
         if isinstance(pos, Point):
             self.pos = Point(pos.x, pos.y)
             for input in self.inputs.values():

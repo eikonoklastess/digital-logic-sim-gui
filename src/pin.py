@@ -1,9 +1,9 @@
-from gatebis import Gate
+from gate import Gate
 from point import Point, Line
 import tkinter as tk
 from tkinter import ttk
 import uuid
-from mainbis import CircuitDesigner
+from main import CircuitDesigner
 
 
 # i/0 pin can be on a gate or free standing in the circuit
