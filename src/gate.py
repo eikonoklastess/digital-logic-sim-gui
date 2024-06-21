@@ -1,231 +1,204 @@
-from pin import Input, Output
+from os import posix_spawn, walk
 import tkinter as tk
 from tkinter import ttk
 import uuid
-import pprint
-import itertools
+from point import Point
+from mainbis import CircuitDesigner
+import pprint as pp
 
-class Point():
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
 
+# if a gate object is created without option its created as a repeater gate that only propagate its input value
 class Gate():
-    def __init__(self, canvas, pos):
-        self.c = canvas
-        self.pos = pos
-        self.inputs = []
-        self.outputs = []
-        self.tag = str(uuid.uuid4())
-        self.padding = 10
-        self.catching_area = None
-        self.truth_table = None
-        
-    def __repr__(self):
-        raise NotImplementedError("Subclass must implement this method")
+    def __init__(self, canvas: CircuitDesigner, pos, tt=None, inputs=None, outputs=None, name=None):
+        from pinbis import Pin
+        # Logical Representation
+        self.tt: list[list] = tt if tt is not None else []  # tt for truth table
+        if inputs is None and outputs is None:
+            new_input = Pin(canvas, "input", 0, pos, relative_pos=Point(self.h // 2, 0)) 
+            new_output = Pin(canvas, "output", 0, pos, relative_pos=Point(self.h // 2, self.w))
+            self.inputs: dict = {new_input.tag : new_input}
+            self.outputs: dict = {new_output.tag : new_output}
+        else:
+            self.inputs: dict = inputs if isinstance(inputs, dict) else {}
+            self.outputs: dict = outputs if isinstance(outputs, dict) else {}
 
-    def calc_output(self):
-        raise NotImplementedError("Subclass must implement this method")
+        # graphical representation
+        # tkinter proprety
+        self.c: CircuitDesigner = canvas
+        self.tag = str(uuid.uuid4())
+        # graphics
+        self.name = name if name is not None else "repeater"
+        self.pos: Point = Point(int(pos.x), int(pos.y))
+        self.font_size = 10 * canvas.factor**canvas.zoom_level
+        # size in proportion to number of input
+        self.size = 50 #15 + len(self.inputs) * 15
+        self.h = int(self.size // 1.2 * canvas.factor**canvas.zoom_level) if tt is not None else 50 * canvas.factor**canvas.zoom_level
+        self.w = int(self.size * canvas.factor**canvas.zoom_level) if tt is not None else 50 * canvas.factor**canvas.zoom_level
+        self.width = int(2 * canvas.factor**canvas.zoom_level) # width of drawings
+
+    def display_tt(self):
+        inputs = list(self.inputs.values())
+        outputs = list(self.outputs.values())
+        table = tk.Tk()
+        table.title("Circuit Truth Table")
+        tt_ui = ttk.Treeview(table, show="headings")
+        columns = []
+        for pin in inputs + outputs: # should ensure that output are at the end of the truth table
+            header = "input" + str(pin.order) if pin.type_ == "output" else "output" + str(pin.order) #  circuit input are equivalent to gate output and vice versa
+            columns.append(header)
+        tt_ui.configure(columns=tuple(columns))
+        for pin in inputs + outputs:
+            header = "input" + str(pin.order) if pin.type_ == "output" else "output" + str(pin.order) #  circuit input are equivalent to gate output and vice versa
+            tt_ui.heading(header, text=header)
+        for n in range(len(self.tt)):
+            tt_ui.insert(parent="", index=n, values=tuple(self.tt[n]))
+        tt_ui.pack(expand=True, fill=tk.BOTH)
+        tt_ui.pack_propagate(False)
+        # tt_ui.delete(*tt_ui.get_children())
+
+    # functions for logic
+    def calc(self):
+        if len(self.tt) == 0:
+            list(self.outputs.values())[0].update_val(list(self.inputs.values())[0].val)
+        else:
+            inputs_configuration = [pin.val for pin in list(self.inputs.values()) if pin.type_ == "input"]
+            for n in self.tt:
+                split_index = len(inputs_configuration) #if len(inputs_configuration) > 1 else 1
+                tt_inputs = n[:split_index]
+                tt_outputs = n[split_index:]
+                if inputs_configuration == [int(n) for n in tt_inputs]:
+                    # only works with one input
+                    list(self.outputs.values())[0].update_value(int(tt_outputs[0]))
+
+    # functions for graphics
+    def update_graphic(self, event=None, pos=None):
+        from pinbis import Pin
+        if isinstance(pos, Point):
+            self.pos = Point(pos.x, pos.y)
+            for input in self.inputs.values():
+                input.update_graphic(pos=Point(pos.x, pos.y), event=event)
+            for output in self.outputs.values():
+                output.update_graphic(pos=Point(pos.x, pos.y), event=event)
+        elif isinstance(event, tk.Event):
+            if event.delta > 0:
+                self.pos.x = int(self.pos.x * self.c.factor)
+                self.pos.y = int(self.pos.y * self.c.factor)
+            else:
+                self.pos.x //= self.c.factor 
+                self.pos.y //= self.c.factor 
+            self.width = int(2 * self.c.factor ** self.c.zoom_level)
+            self.h = int(self.size // 1.2 * self.c.factor ** self.c.zoom_level)
+            self.w = int(self.size * self.c.factor ** self.c.zoom_level)
+            self.font_size = int(10 * self.c.factor ** self.c.zoom_level)
+        for pin in (list(self.inputs.values())+list(self.outputs.values())):
+            if isinstance(pin, Pin):
+                pin.update_graphic()
+        self.draw()
 
     def draw(self):
-        raise NotImplementedError("Subclass must implement this method")
-
-    def delete(self):
         self.c.delete(self.tag)
-        for input in self.inputs:
-            input.delete()
-        for output in self.outputs:
-            output.delete()
-        self.inputs = []
-        self.outputs = []
-
-    def draw_pins(self):
-        for input in self.inputs:
+        if not self.draw_helper():
+            self.c.create_rectangle(self.pos.x,
+                                    self.pos.y,
+                                    self.pos.x + self.w,
+                                    self.pos.y + self.h,
+                                    fill="white",
+                                    outline="black",
+                                    tags=(self.tag, "gate proper", "gate", "element"))
+            text_pos_x = self.pos.x + self.w//2
+            text_pos_y = self.pos.y + self.h//2
+            self.c.create_text(text_pos_x,
+                               text_pos_y,
+                               text=self.name,
+                               fill="black",
+                               width=self.w,
+                               font=("purisa", int(self.font_size)),
+                               tags=(self.tag, "gate", "gate proper", "element"))
+        for input in self.inputs.values():
             input.draw()
-        for output in self.outputs:
+        for output in self.outputs.values():
             output.draw()
 
-    def add_input(self, id):
-        input = Input(self.c, self, id)
-        self.inputs.append(input)
-    
-    def add_output(self, id):
-        output = Output(self.c, self, id)
-        self.outputs.append(output)
-
-    def generate_truth_table(self):
-        self.truth_table = [[0 for n in range(2**len(self.inputs))] for n in range(len(self.inputs)+len(self.outputs))]
-        for n in range(2**len(self.inputs)):
-            for m in range(len(self.inputs)):
-                pass
-        pprint.pprint(self.truth_table)
-        k = len(self.inputs)+1
-        for cols in range(len(self.inputs)):
-            k -= 1
-            for rows, i in zip(range(2**len(self.inputs)), itertools.cycle(range(2**k))):
-                value = 1 if i >= (2**k)//2 else 0
-                self.truth_table[cols][rows] = value
-        for output in range(2**len(self.inputs)):
-            for n in range(len(self.inputs)):
-                self.inputs[n].val = self.truth_table[n][output]
-            self.calc_output()
-            self.truth_table[-1][output] = self.outputs[0].val
-        pprint.pprint(self.truth_table)
-
-
-class And_Gate(Gate):
-    def __init__(self, canvas, pos):
-        super().__init__(canvas, pos)
-        self.h = 60
-        self.w = 50
-        # self.catching_area = self.c.create_rectangle(self.pos.x, self.pos.y, self.pos.x+self.h, self.pos.y+self.w, fill="", tags=(self.tag, "gate_catching_area", "gate"))
-        self.add_input(1)
-        self.add_input(2)
-        self.add_output(0)
-
     def __repr__(self):
-        return f"AND Gate: tag={self.tag}, input1 val={self.inputs[0].val}, input2 val={self.inputs[1].val}, output val ={self.outputs[0].val}"
+        return f"gate:{self.name}" #\ntt:{self.tt}\ninputs:{self.inputs}\noutputs:{self.outputs}"
 
-    def draw(self):
-        self.c.create_line(self.pos.x, self.pos.y, self.pos.x+self.h-30, self.pos.y, fill="black", tags=(self.tag, "gate", "gate_proper"))
-        self.c.create_line(self.pos.x, self.pos.y+self.w, self.pos.x+self.h-30, self.pos.y+self.w, fill="black", tags=(self.tag, "gate", "gate_proper"))
-        self.c.create_line(self.pos.x, self.pos.y, self.pos.x, self.pos.y+self.w, fill="black", tags=(self.tag, "gate", "gate_proper"))
-        self.c.create_arc(self.pos.x+self.h-60, self.pos.y, self.pos.x+self.h, self.pos.y+self.w, outline="black", extent=180, start=270, style=tk.ARC, tags=(self.tag, "gate", "gate_proper"))
-        self.catching_area = self.c.create_rectangle(self.pos.x, self.pos.y, self.pos.x+self.h, self.pos.y+self.w, fill="", outline="", tags=(self.tag, "gate_catching_area", "gate"))
-        
-        self.draw_pins()
+    def draw_helper(self):
+        if self.name == "AND":
+            self.c.create_line(self.pos.x,
+                               self.pos.y,
+                               self.pos.x + self.w//2 ,#- (self.w // (2 * self.c.factor**self.c.zoom_level)), 
+                               self.pos.y, 
+                               fill="black", width=self.width,
+                               tags=(self.tag, "gate", "element"))
+            self.c.create_line(self.pos.x,
+                               self.pos.y + self.h, 
+                               self.pos.x + self.w//2 ,#- (self.w // (2 * self.c.factor**self.c.zoom_level)), 
+                               self.pos.y + self.h, 
+                               fill="black", width=self.width, 
+                               tags=(self.tag, "gate", "element"))
+            self.c.create_line(self.pos.x, 
+                               self.pos.y, 
+                               self.pos.x, 
+                               self.pos.y + self.h, 
+                               fill="black", width=self.width, 
+                               tags=(self.tag, "gate", "element"))
+            self.c.create_arc(self.pos.x, 
+                              self.pos.y, 
+                              self.pos.x + self.w ,
+                              self.pos.y + self.h, 
+                              outline="black", 
+                              width=self.width,
+                              extent=180, 
+                              start=270, style=tk.ARC, tags=(self.tag, "gate", "element"))
+            self.c.create_rectangle(self.pos.x, self.pos.y, self.pos.x + self.w, self.pos.y + self.h, fill="", outline="", tags=(self.tag, "element", "gate"))
 
-    def calc_output(self):
-        if self.inputs[0].val != -1 and self.inputs[1].val != -1:
-            self.outputs[0].val = self.inputs[0].val & self.inputs[1].val
-        else:
-            raise ValueError(f"tried to calc output while inputs uninitialized of: {self.__repr__}")
+            return True
+        elif self.name == "OR":
+            self.c.create_arc(self.pos.x - self.w ,#// (6 * self.c.factor**self.c.zoom_level)),
+                              self.pos.y, 
+                              self.pos.x + self.w ,#// (6 * self.c.factor**self.c.zoom_level)),
+                              self.pos.y + self.h, 
+                              outline="black", 
+                              width=self.width,
+                              extent=180, start=270, style=tk.ARC,
+                              tags=(self.tag, "gate", "element"))
+            self.c.create_arc(self.pos.x - self.w // 6,# * self.c.factor**self.c.zoom_level)), 
+                              self.pos.y, 
+                              self.pos.x + self.w // 6,# * self.c.factor**self.c.zoom_level)), 
+                              self.pos.y + self.h, 
+                              outline="black", 
+                              width=self.width,
+                              extent=180, start=270, style=tk.ARC, 
+                              tags=(self.tag, "gate", "element"))
+            self.c.create_rectangle(self.pos.x, self.pos.y, self.pos.x + self.w, self.pos.y + self.h, fill="", outline="", tags=(self.tag, "gate_catching_area", "gate", "element"))
 
-class Or_Gate(Gate):
-    def __init__(self, canvas, pos):
-        super().__init__(canvas, pos)
-        self.h = 60
-        self.w = 50
-        # self.catching_area = self.c.create_rectangle(self.pos.x, self.pos.y, self.pos.x+self.h, self.pos.y+self.w, fill="", tags=(self.tag, "gate_catching_area", "gate"))
-        self.add_input(1)
-        self.add_input(2)
-        self.add_output(0)
+            return True
+        elif self.name == "NOT":
+            self.c.create_line(self.pos.x,
+                               self.pos.y, 
+                               self.pos.x + self.w, 
+                               self.pos.y + (self.h // 2), 
+                               fill="black", width=self.width, tags=(self.tag, "gate", "element"))
+            self.c.create_line(self.pos.x, 
+                               self.pos.y + self.h, 
+                               self.pos.x + self.w, 
+                               self.pos.y + (self.h // 2), 
+                               fill="black", width=self.width, tags=(self.tag, "gate", "element"))
+            self.c.create_line(self.pos.x, 
+                               self.pos.y, 
+                               self.pos.x,
+                               self.pos.y + self.h, 
+                               fill="black", width=self.width, tags=(self.tag, "gate", "element"))
+            # self.c.create_oval(self.pos.x + self.w - 2 * self.c.factor**self.c.zoom_level,
+            #                    self.pos.y + self.h // 2 - (2 * self.c.factor**self.c.zoom_level),
+            #                    self.pos.x + self.w + 2 * self.c.factor**self.c.zoom_level,
+            #                    self.pos.y + self.h // 2 - (2 * self.c.factor**self.c.zoom_level),
+            #                    fill="black", width=self.width, tags=(self.tag, "gate", "element"))
 
-    def __repr__(self):
-        return f"OR Gate: tag={self.tag}, input1 val={self.inputs[0].val}, input2 val={self.inputs[1].val}, output val ={self.outputs[0].val}"
+            self.c.create_rectangle(self.pos.x, self.pos.y, self.pos.x + self.w, self.pos.y + self.h, fill="", outline="", tags=(self.tag, "gate_catching_area", "gate", "element"))
 
-    def draw(self):
-        self.c.create_arc(self.pos.x-10, self.pos.y, self.pos.x+10, self.pos.y+self.w, outline="black", extent=180, start=270, style=tk.ARC, tags=(self.tag, "gate", "gate_proper"))
-        self.c.create_arc(self.pos.x-60, self.pos.y, self.pos.x+60, self.pos.y+self.w, outline="black", extent=180, start=270, style=tk.ARC, tags=(self.tag, "gate", "gate_proper"))
-        self.catching_area = self.c.create_rectangle(self.pos.x, self.pos.y, self.pos.x+self.h, self.pos.y+self.w, fill="", outline="", tags=(self.tag, "gate_catching_area", "gate"))
-
-        self.draw_pins()
-
-    def calc_output(self):
-        if self.inputs[0].val != -1 and self.inputs[1].val != -1:
-            self.outputs[0].val = self.inputs[0].val or self.inputs[1].val
-        else:
-            raise ValueError(f"tried to calc output while inputs uninitialized of: {self.__repr__}")
-
-class Not_Gate(Gate):
-    def __init__(self, canvas, pos):
-        super().__init__(canvas, pos)
-        self.h = 60
-        self.w = 50
-        # self.catching_area = self.c.create_rectangle(self.pos.x, self.pos.y, self.pos.x+self.h, self.pos.y+self.w, fill="", tags=(self.tag, "gate_catching_area", "gate"))
-        self.add_input(0)
-        self.add_output(0)
-
-    def __repr__(self):
-        return f"NOT Gate: tag={self.tag}, input1 val={self.inputs[0].val}, output val ={self.outputs[0].val}"
-
-    def draw(self):
-        self.c.create_line(self.pos.x, self.pos.y, self.pos.x+self.h, self.pos.y+(self.w//2), fill="black", tags=(self.tag, "gate", "gate_proper"))
-        self.c.create_line(self.pos.x, self.pos.y+self.w, self.pos.x+self.h, self.pos.y+(self.w//2), fill="blacK", tags=(self.tag, "gate", "gate_proper"))
-        self.c.create_line(self.pos.x, self.pos.y, self.pos.x, self.pos.y+self.w, fill="black", tags=(self.tag, "gate", "gate_proper"))
-        self.catching_area = self.c.create_rectangle(self.pos.x, self.pos.y, self.pos.x+self.h, self.pos.y+self.w, fill="", outline="", tags=(self.tag, "gate_catching_area", "gate"))
-        self.draw_pins()
-
-    def calc_output(self):
-        if self.inputs[0].val != -1:
-            self.outputs[0].val = abs(self.inputs[0].val - 1)
-        else:
-            raise ValueError(f"tried to calc output while inputs uninitialized of: {self.__repr__}")
-
-class Circuit_Input(Gate):
-    def __init__(self, canvas, pos):
-        super().__init__(canvas, pos)
-        self.h = 30
-        self.w = 30
-        self.settable_in = None
-        self.val = 0
-        self.add_output(0)
-
-    def draw(self):
-        self.catching_area = self.c.create_rectangle(
-            self.pos.x,
-            self.pos.y,
-            self.pos.x+self.h,
-            self.pos.y+self.w,
-            fill="red",
-            outline="red",
-            tags=(self.tag, "gate", "gate_proper", "gate_catching_area", "circuit_input_catching_area"),)
-
-        self.draw_pins()
-
-        stringvar1 = tk.StringVar(value=f"{self.outputs[0].val}")
-        def button_fun_1():
-            if stringvar1.get() == "0":
-                stringvar1.set("1")
-                self.outputs[0].val = 1
-                self.val = 1
-            else:
-                self.outputs[0].val = 0
-                self.val = 0
-                stringvar1.set(f"{self.outputs[0].val}")
-        button1 = ttk.Button(self.c, text="1", width=1, textvariable=stringvar1, command=button_fun_1)
-        self.c.create_window(self.pos.x-30, self.pos.y, window=button1, tags=(self.tag, "gate", "input"))
-
-    def __repr__(self):
-        return f"input Gate: tag={self.tag}, output1 val={self.outputs[0].val}"
-
-    def calc_output(self):
-        self.outputs[0].val = self.val 
-
-class Circuit_Output(Gate):
-    def __init__(self, canvas, pos):
-        super().__init__(canvas, pos)
-        self.h = 30
-        self.w = 30
-        self.settable_out = None
-        self.add_input(0)
-
-    def draw(self):
-        self.catching_area = self.c.create_rectangle(
-            self.pos.x,
-            self.pos.y,
-            self.pos.x+self.h,
-            self.pos.y+self.w,
-            fill="red",
-            outline="red",
-            tags=(self.tag, "gate", "gate_proper", "gate_catching_area", "circuit_output_catching_area"),)
-
-        self.draw_pins()
-
-        self.settable_out = ttk.Button(self.c, text=f"{self.inputs[0].val}")
-        self.c.create_window(self.pos.x+self.h, self.pos.y, window=self.settable_out, tags=(self.tag, "gate", "output", "circuit_output"))
-
-    def __repr__(self):
-        return f"Output Gate: tag={self.tag}, input1 val={self.inputs[0].val}"
-
-    def calc_output(self):
-        print("calc_output circuit output")
-
-
-
-
-
-
+            return True
+        return False
 
 
 
