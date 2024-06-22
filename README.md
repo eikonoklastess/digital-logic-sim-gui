@@ -22,6 +22,7 @@ This Digital Logic Simulator is a Python-based application that allows users to 
 - Tkinter (usually comes pre-installed with Python)
 - Make sure Tkinter and Python are on the same version
 - MacOS (should be OS naive soon)
+- Mouse, trackpads on macs with Tkinter are buggy
 
 ## Installing and Running the Project
 1. Clone this repository: 
